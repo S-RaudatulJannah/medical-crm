@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+.next/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
+.env.local
+
+# Python virtual environment
+venv/
+.venv/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs & debug
+*.log
+backend_output.txt
