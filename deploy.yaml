@@ -1,0 +1,185 @@
+# ================================================================
+# deploy.yaml — Medical CRM: Platform Manajemen Pasien & Rumah Sakit
+# SDGs Goal 3: Good Health and Well-being
+# Kubernetes: Deployment + Service + ConfigMap + HPA
+# ================================================================
+#
+# CARA PAKAI:
+# 1. Ganti YOUR_DOCKERHUB_USERNAME dengan username Docker Hub kamu
+# 2. kubectl apply -f deploy.yaml
+# 3. minikube service frontend-service --url  (untuk dapatkan URL frontend)
+#
+# ================================================================
+
+# ─────────────────────────────────────────────────────────────────
+# 1. ConfigMap — Konfigurasi Environment Variables
+# ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medical-crm-config
+  labels:
+    app: medical-crm
+data:
+  # URL backend yang diakses dari BROWSER (bukan dari dalam cluster)
+  # Setelah deploy, update dengan: minikube ip → http://<MINIKUBE_IP>:30800
+  NEXT_PUBLIC_API_URL: "http://localhost:30800"
+
+---
+# ─────────────────────────────────────────────────────────────────
+# 2. Backend Deployment — FastAPI (CPU-Intensive untuk Demo HPA)
+# ─────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  labels:
+    app: backend
+    project: medical-crm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        # ⚠️ GANTI: YOUR_DOCKERHUB_USERNAME dengan username Docker Hub kamu
+        image: YOUR_DOCKERHUB_USERNAME/medical-crm-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        # ⚠️ WAJIB ada resource requests agar HPA bisa menghitung % CPU
+        resources:
+          requests:
+            cpu: "100m"      # 10% dari 1 CPU core
+            memory: "128Mi"
+          limits:
+            cpu: "300m"      # Max 30% dari 1 CPU core
+            memory: "256Mi"
+        # Health check — Kubernetes akan cek endpoint ini secara berkala
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+---
+# ─────────────────────────────────────────────────────────────────
+# 3. Backend Service — Expose port 8000 via NodePort 30800
+# ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  type: NodePort
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+    nodePort: 30800   # Akses backend di: http://<MINIKUBE_IP>:30800
+
+---
+# ─────────────────────────────────────────────────────────────────
+# 4. Frontend Deployment — Next.js
+# ─────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: frontend
+    project: medical-crm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        # ⚠️ GANTI: YOUR_DOCKERHUB_USERNAME dengan username Docker Hub kamu
+        image: YOUR_DOCKERHUB_USERNAME/medical-crm-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medical-crm-config
+              key: NEXT_PUBLIC_API_URL
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# ─────────────────────────────────────────────────────────────────
+# 5. Frontend Service — Expose port 3000 via NodePort 30000
+# ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  type: NodePort
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
+    nodePort: 30000   # Akses frontend di: http://<MINIKUBE_IP>:30000
+
+---
+# ─────────────────────────────────────────────────────────────────
+# 6. Horizontal Pod Autoscaler (HPA) — Target: Backend
+# Akan scale UP saat CPU backend > 50%
+# Min: 1 pod | Max: 5 pod
+# ─────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  labels:
+    app: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50   # Scale up kalau CPU rata-rata > 50%
