@@ -21,9 +21,8 @@ metadata:
   labels:
     app: medical-crm
 data:
-  # URL backend yang diakses dari BROWSER (bukan dari dalam cluster)
-  # Setelah deploy, update dengan: minikube ip → http://<MINIKUBE_IP>:30800
-  NEXT_PUBLIC_API_URL: "http://localhost:30800"
+  # URL backend internal di dalam cluster Kubernetes (Next.js server-side proxy)
+  BACKEND_URL: "http://backend-service:8000"
 
 ---
 # ─────────────────────────────────────────────────────────────────
@@ -48,8 +47,7 @@ spec:
     spec:
       containers:
       - name: backend
-        # ⚠️ GANTI: YOUR_DOCKERHUB_USERNAME dengan username Docker Hub kamu
-        image: YOUR_DOCKERHUB_USERNAME/medical-crm-backend:latest
+        image: raudatul/medical-crm-backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -118,17 +116,16 @@ spec:
     spec:
       containers:
       - name: frontend
-        # ⚠️ GANTI: YOUR_DOCKERHUB_USERNAME dengan username Docker Hub kamu
-        image: YOUR_DOCKERHUB_USERNAME/medical-crm-frontend:latest
+        image: raudatul/medical-crm-frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
         env:
-        - name: NEXT_PUBLIC_API_URL
+        - name: BACKEND_URL
           valueFrom:
             configMapKeyRef:
               name: medical-crm-config
-              key: NEXT_PUBLIC_API_URL
+              key: BACKEND_URL
         resources:
           requests:
             cpu: "100m"
