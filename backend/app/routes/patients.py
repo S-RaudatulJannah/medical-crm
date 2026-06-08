@@ -7,11 +7,12 @@ Endpoints:
 - GET  /api/patients/{id} → Detail pasien berdasarkan ID
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from datetime import datetime
 
 from app.models import PatientInput
+from app.security import require_roles, verify_csrf_token, rate_limiter, waf_protect
 from app.services.triage import cpu_intensive_triage_computation, determine_triage_status
 
 router = APIRouter()
@@ -85,6 +86,7 @@ _patient_counter = 6  # Auto-increment ID counter
     "/patients",
     summary="Daftarkan Pasien Darurat (Triase Otomatis + CPU Load untuk HPA)",
     response_description="Data pasien yang terdaftar beserta hasil triase",
+    dependencies=[Depends(require_roles("admin")), Depends(verify_csrf_token), Depends(rate_limiter), Depends(waf_protect)],
 )
 def register_patient(patient: PatientInput):
     """
@@ -160,6 +162,7 @@ def register_patient(patient: PatientInput):
 @router.get(
     "/patients",
     summary="Daftar Semua Pasien Terdaftar",
+    dependencies=[Depends(require_roles("admin", "staff", "viewer"))],
 )
 def get_all_patients():
     """Mendapatkan seluruh daftar pasien yang sudah terdaftar di sistem."""
@@ -175,6 +178,7 @@ def get_all_patients():
 @router.get(
     "/patients/{patient_id}",
     summary="Detail Pasien Berdasarkan ID",
+    dependencies=[Depends(require_roles("admin", "staff", "viewer"))],
 )
 def get_patient_by_id(patient_id: int):
     """Mendapatkan informasi lengkap seorang pasien berdasarkan ID-nya."""

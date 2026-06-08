@@ -9,6 +9,7 @@ import {
   Activity,
   Shield,
   Cpu,
+  LogIn,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -23,6 +24,12 @@ const NAV_ITEMS = [
     label: 'Daftarkan Pasien',
     sublabel: 'Registrasi Darurat',
     Icon: UserPlus,
+  },
+  {
+    href: '/login',
+    label: 'Login Admin',
+    sublabel: 'Otentikasi & Token',
+    Icon: LogIn,
   },
 ]
 

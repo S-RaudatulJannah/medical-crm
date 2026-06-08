@@ -6,11 +6,12 @@ Endpoints:
   (Total pasien hari ini, kapasitas, distribusi triase, daftar pasien)
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from datetime import datetime
 
 # Import shared data store dari modul patients
 from app.routes.patients import _patients_store
+from app.security import require_roles
 
 router = APIRouter()
 
@@ -29,6 +30,7 @@ _HOSPITAL_CONFIG = {
     "/hospitals/stats",
     summary="Statistik Real-time Rumah Sakit",
     response_description="Data lengkap statistik operasional rumah sakit",
+    dependencies=[Depends(require_roles("admin", "staff", "viewer"))],
 )
 def get_hospital_stats():
     """

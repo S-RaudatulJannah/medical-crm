@@ -78,10 +78,14 @@ const INITIAL_FORM: PatientInput = {
 // ── Page Component ────────────────────────────────────────────────
 
 export default function PatientPage() {
-  const [form,        setForm]        = useState<PatientInput>(INITIAL_FORM)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [result,      setResult]      = useState<RegisterResponse | null>(null)
-  const [error,       setError]       = useState<string | null>(null)
+  const [form,           setForm]           = useState<PatientInput>(INITIAL_FORM)
+  const [isSubmitting,   setIsSubmitting]   = useState(false)
+  const [result,         setResult]         = useState<RegisterResponse | null>(null)
+  const [error,          setError]          = useState<string | null>(null)
+  const [uploadFile,     setUploadFile]     = useState<File | null>(null)
+  const [uploadStatus,   setUploadStatus]   = useState<string | null>(null)
+  const [uploadError,    setUploadError]    = useState<string | null>(null)
+  const [isUploading,    setIsUploading]    = useState(false)
 
   const currentPain = PAIN_DESCRIPTIONS[form.pain_level]
 
@@ -126,7 +130,44 @@ export default function PatientPage() {
   const handleReset = () => {
     setResult(null)
     setError(null)
+    setUploadError(null)
+    setUploadStatus(null)
     setForm(INITIAL_FORM)
+  }
+
+  const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    if (!result || !result.patient?.id) {
+      setUploadError('Daftarkan pasien terlebih dahulu sebelum mengunggah dokumen.')
+      return
+    }
+    if (!uploadFile) {
+      setUploadError('Pilih file untuk diunggah.')
+      return
+    }
+
+    setIsUploading(true)
+    setUploadError(null)
+    setUploadStatus(null)
+
+    try {
+      const response = await apiClient.uploadPatientDocument(
+        result.patient.id,
+        uploadFile,
+      )
+
+      setUploadStatus(`Dokumen berhasil diunggah: ${response.file_name}`)
+      setUploadFile(null)
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal mengunggah file. Pastikan Anda sudah login dan coba lagi.',
+      )
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -425,6 +466,57 @@ export default function PatientPage() {
               </button>
             </div>
           )}
+
+          <div className="bg-white rounded-2xl p-5 shadow-card border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[13px] font-bold text-gray-700">Upload Dokumen Pasien</p>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Unggah file medis yang terkait dengan pasien terdaftar.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpload} className="space-y-4">
+              <div>
+                <label htmlFor="patient-upload" className="block text-[12px] font-semibold text-gray-700 mb-2">
+                  Pilih dokumen
+                </label>
+                <input
+                  id="patient-upload"
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg"
+                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                  disabled={isUploading}
+                  className="w-full text-sm text-gray-600"
+                />
+              </div>
+
+              {uploadError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {uploadError}
+                </div>
+              )}
+
+              {uploadStatus && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {uploadStatus}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isUploading}
+                className="btn-primary w-full py-3 rounded-2xl text-sm font-semibold text-white bg-[#62796A] hover:bg-[#556d5b] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUploading ? 'Mengunggah dokumen...' : 'Unggah Dokumen'}
+              </button>
+
+              <p className="text-[10px] text-gray-400">
+                Pastikan Anda sudah login. Hanya pengguna admin dengan token yang valid dapat mengunggah.
+              </p>
+            </form>
+          </div>
 
           {/* ── Triage Guide ── */}
           <div className="bg-white rounded-2xl p-5 shadow-card border border-gray-100">

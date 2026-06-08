@@ -71,15 +71,80 @@ export interface HospitalStats {
  * Helper fetch dengan error handling terpusat.
  * Semua request diarahkan ke /api/* yang di-proxy ke backend.
  */
+const API_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? 'blue-team-demo-secret'
+const CSRF_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_CSRF_TOKEN ?? 'blue-team-demo-csrf'
+const AUTH_TOKEN_KEY = 'MEDICRM_ACCESS_TOKEN'
+const CSRF_TOKEN_KEY = 'MEDICRM_CSRF_TOKEN'
+const AUTH_ROLE_KEY = 'MEDICRM_ROLE'
+
+export interface AuthResponse {
+  access_token: string
+  token_type: 'bearer'
+  role: string
+  csrf_token: string
+}
+
+export interface UploadResponse {
+  message: string
+  patient_id: number
+  file_name: string
+  content_type: string
+  size_bytes: number
+}
+
+function getStoredToken(): string {
+  if (typeof window === 'undefined') return API_FALLBACK_TOKEN
+  return window.localStorage.getItem(AUTH_TOKEN_KEY) ?? API_FALLBACK_TOKEN
+}
+
+function getStoredCsrfToken(): string {
+  if (typeof window === 'undefined') return CSRF_FALLBACK_TOKEN
+  return window.localStorage.getItem(CSRF_TOKEN_KEY) ?? CSRF_FALLBACK_TOKEN
+}
+
+export function storeAuthTokens(token: string, csrf: string, role: string) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
+  window.localStorage.setItem(CSRF_TOKEN_KEY, csrf)
+  window.localStorage.setItem(AUTH_ROLE_KEY, role)
+}
+
+export function clearAuthTokens() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(AUTH_TOKEN_KEY)
+  window.localStorage.removeItem(CSRF_TOKEN_KEY)
+  window.localStorage.removeItem(AUTH_ROLE_KEY)
+}
+
+export function getStoredAuthState() {
+  if (typeof window === 'undefined') return null
+  const token = window.localStorage.getItem(AUTH_TOKEN_KEY)
+  const csrf = window.localStorage.getItem(CSRF_TOKEN_KEY)
+  const role = window.localStorage.getItem(AUTH_ROLE_KEY)
+  return token && csrf && role ? { token, csrf, role } : null
+}
+
 async function apiFetch<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
   const url = `/api${path}`
 
+  const defaultHeaders: Record<string, string> = {
+    Authorization: `Bearer ${getStoredToken()}`,
+    'X-CSRF-Token': getStoredCsrfToken(),
+  }
+
+  if (!(options?.body instanceof FormData)) {
+    defaultHeaders['Content-Type'] = 'application/json'
+  }
+
   const response = await fetch(url, {
     cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...defaultHeaders,
+      ...(options?.headers ?? {}),
+    },
     ...options,
   })
 
@@ -126,4 +191,30 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  /**
+   * POST /api/auth/login
+   * Melakukan login admin dan menerima access token + CSRF token.
+   */
+  login: (username: string, password: string): Promise<AuthResponse> =>
+    apiFetch<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  /**
+   * POST /api/patients/{id}/upload
+   * Upload dokumen pasien dengan FormData.
+   */
+  uploadPatientDocument: (
+    patientId: number,
+    file: File,
+  ): Promise<UploadResponse> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiFetch<UploadResponse>(`/patients/${patientId}/upload`, {
+      method: 'POST',
+      body: formData,
+    })
+  },
 }

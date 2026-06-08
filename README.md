@@ -50,6 +50,30 @@ npm run dev
 Frontend berjalan di: `http://localhost:3000`
 
 ---
+## 🔐 Security Simulation (Blue Team)
+
+Pada versi ini, backend menambahkan beberapa lapisan keamanan aplikasi untuk simulasi:
+
+- Token-based authentication untuk semua API `/api/patients` dan `/api/hospitals/stats`
+- CSRF protection dengan header `X-CSRF-Token` untuk request berbahaya
+- Role-based access control (admin / staff / viewer) untuk membatasi izin endpoint
+- Rate limiting sederhana pada endpoint pendaftaran pasien
+- WAF-style payload inspection untuk memblokir injeksi dan XSS umum
+- Secure file upload endpoint untuk dokumen pasien dengan validasi MIME dan ukuran
+- Security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Strict-Transport-Security`)
+
+### Token akses default
+
+Frontend menggunakan token default:
+
+```bash
+NEXT_PUBLIC_API_TOKEN=blue-team-demo-secret
+NEXT_PUBLIC_CSRF_TOKEN=blue-team-demo-csrf
+```
+
+Untuk simulasi Blue Team, ganti `NEXT_PUBLIC_API_TOKEN` dan `NEXT_PUBLIC_CSRF_TOKEN` dengan nilai rahasia di environment.
+
+---
 
 ## 🐳 Docker Build
 

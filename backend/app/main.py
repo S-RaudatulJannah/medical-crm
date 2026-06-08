@@ -12,7 +12,8 @@ Arsitektur:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import patients, hospitals
+from app.routes import patients, hospitals, auth, upload
+from app.security import SecurityHeadersMiddleware
 
 # ─────────────────────────────────────────────
 # Inisialisasi FastAPI Application
@@ -47,8 +48,15 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────────
+# Security Middleware
+# ─────────────────────────────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ─────────────────────────────────────────────
 # Register Routers
 # ─────────────────────────────────────────────
+app.include_router(auth.router, prefix="/api", tags=["🔐 Authentication"])
+app.include_router(upload.router, prefix="/api", tags=["📁 File Upload"])
 app.include_router(patients.router, prefix="/api", tags=["🏥 Patients - Manajemen Pasien"])
 app.include_router(hospitals.router, prefix="/api", tags=["🏨 Hospitals - Manajemen Rumah Sakit"])
 
