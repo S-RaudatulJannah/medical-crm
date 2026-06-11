@@ -41,9 +41,6 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Admin Login</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Login untuk mendapatkan access token, CSRF token, dan akses ke fitur blue team.
-            </p>
           </div>
         </div>
 
@@ -60,6 +57,7 @@ export default function LoginPage() {
               className="form-input w-full"
               placeholder="admin"
               required
+              disabled={isLoading}
             />
           </div>
 
@@ -76,6 +74,7 @@ export default function LoginPage() {
               placeholder="••••••••"
               required
               minLength={8}
+              disabled={isLoading}
             />
           </div>
 
@@ -105,11 +104,6 @@ export default function LoginPage() {
             {isLoading ? 'Memproses login...' : 'Masuk dan Simpan Token'}
           </button>
         </form>
-
-        <div className="mt-6 text-xs text-gray-500 space-y-2">
-          <p>Gunakan kredensial admin yang valid untuk mendapatkan token dan CSRF token.</p>
-          <p>Token tersimpan di browser untuk dipakai pada permintaan API lanjutan.</p>
-        </div>
       </div>
 
       <div className="flex items-center justify-between gap-4 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">

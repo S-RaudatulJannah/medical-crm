@@ -70,9 +70,24 @@ export interface HospitalStats {
 /**
  * Helper fetch dengan error handling terpusat.
  * Semua request diarahkan ke /api/* yang di-proxy ke backend.
+ *
+ * [FIX-11] Token storage dimigrasi dari localStorage ke sessionStorage.
+ *
+ * Mengapa sessionStorage lebih aman?
+ * - localStorage: Data PERMANEN, bertahan bahkan setelah browser ditutup.
+ *   Jika ada celah XSS, attacker bisa menjalankan:
+ *   localStorage.getItem('MEDICRM_ACCESS_TOKEN') → TOKEN DICURI!
+ *   Dan token itu akan tetap tersedia bahkan keesokan harinya.
+ *
+ * - sessionStorage: Data SEMENTARA, dihapus saat tab ditutup.
+ *   Selain itu, data diisolasi per-tab (tab A tidak bisa baca data tab B).
+ *   Ini memperkecil jendela waktu eksploitasi XSS secara signifikan.
+ *
+ * Fallback token juga dikosongkan — tidak lagi ada hardcoded demo secret.
+ * User WAJIB login terlebih dahulu untuk mendapatkan token valid.
  */
-const API_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? 'blue-team-demo-secret'
-const CSRF_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_CSRF_TOKEN ?? 'blue-team-demo-csrf'
+const API_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? ''
+const CSRF_FALLBACK_TOKEN = process.env.NEXT_PUBLIC_CSRF_TOKEN ?? ''
 const AUTH_TOKEN_KEY = 'MEDICRM_ACCESS_TOKEN'
 const CSRF_TOKEN_KEY = 'MEDICRM_CSRF_TOKEN'
 const AUTH_ROLE_KEY = 'MEDICRM_ROLE'
@@ -94,33 +109,33 @@ export interface UploadResponse {
 
 function getStoredToken(): string {
   if (typeof window === 'undefined') return API_FALLBACK_TOKEN
-  return window.localStorage.getItem(AUTH_TOKEN_KEY) ?? API_FALLBACK_TOKEN
+  return window.sessionStorage.getItem(AUTH_TOKEN_KEY) ?? API_FALLBACK_TOKEN
 }
 
 function getStoredCsrfToken(): string {
   if (typeof window === 'undefined') return CSRF_FALLBACK_TOKEN
-  return window.localStorage.getItem(CSRF_TOKEN_KEY) ?? CSRF_FALLBACK_TOKEN
+  return window.sessionStorage.getItem(CSRF_TOKEN_KEY) ?? CSRF_FALLBACK_TOKEN
 }
 
 export function storeAuthTokens(token: string, csrf: string, role: string) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token)
-  window.localStorage.setItem(CSRF_TOKEN_KEY, csrf)
-  window.localStorage.setItem(AUTH_ROLE_KEY, role)
+  window.sessionStorage.setItem(AUTH_TOKEN_KEY, token)
+  window.sessionStorage.setItem(CSRF_TOKEN_KEY, csrf)
+  window.sessionStorage.setItem(AUTH_ROLE_KEY, role)
 }
 
 export function clearAuthTokens() {
   if (typeof window === 'undefined') return
-  window.localStorage.removeItem(AUTH_TOKEN_KEY)
-  window.localStorage.removeItem(CSRF_TOKEN_KEY)
-  window.localStorage.removeItem(AUTH_ROLE_KEY)
+  window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+  window.sessionStorage.removeItem(CSRF_TOKEN_KEY)
+  window.sessionStorage.removeItem(AUTH_ROLE_KEY)
 }
 
 export function getStoredAuthState() {
   if (typeof window === 'undefined') return null
-  const token = window.localStorage.getItem(AUTH_TOKEN_KEY)
-  const csrf = window.localStorage.getItem(CSRF_TOKEN_KEY)
-  const role = window.localStorage.getItem(AUTH_ROLE_KEY)
+  const token = window.sessionStorage.getItem(AUTH_TOKEN_KEY)
+  const csrf = window.sessionStorage.getItem(CSRF_TOKEN_KEY)
+  const role = window.sessionStorage.getItem(AUTH_ROLE_KEY)
   return token && csrf && role ? { token, csrf, role } : null
 }
 

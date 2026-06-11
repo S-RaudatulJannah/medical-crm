@@ -1,0 +1,162 @@
+<!--
+══════════════════════════════════════════════════════════════
+Medical CRM — Wazuh Custom Rules
+══════════════════════════════════════════════════════════════
+
+APA INI?
+Rules menentukan "seberapa berbahaya" setiap event keamanan.
+Wazuh menggunakan level 0-15 untuk menilai severity:
+
+  Level 0-4  : Informational (tidak ada notifikasi)
+  Level 5-6  : Notice (dicatat tapi belum alert)
+  Level 7-9  : Warning/High (MULAI TRIGGER TELEGRAM!)
+  Level 10-12: Critical (PASTI TRIGGER TELEGRAM!)
+  Level 13-15: Catastrophic
+
+Konfigurasi di ossec.conf kita mengatur: level >= 7 → kirim ke Telegram.
+Jadi semua rule dengan level 7+ akan membuat HP kalian bunyi "TING!".
+
+CARA KERJA:
+1. Wazuh baca log → decoder parse → extract fields
+2. Wazuh cocokkan fields dengan rules di bawah
+3. Jika cocok → buat alert dengan level yang ditentukan
+4. Jika level >= 7 → jalankan script Telegram
+
+CARA PASANG:
+  sudo cp medical-crm_rules.xml /var/ossec/etc/rules/
+  sudo systemctl restart wazuh-manager
+══════════════════════════════════════════════════════════════
+-->
+
+<group name="medical-crm,web-attack,">
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- BASE RULE: Semua event dari Medical CRM        -->
+  <!-- Ini rule "induk" yang akan di-referensi oleh    -->
+  <!-- rule-rule spesifik di bawahnya.                 -->
+  <!-- Level 3 = informational, tidak trigger alert.   -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rule id="100100" level="3">
+    <decoded_as>medical-crm</decoded_as>
+    <description>Medical CRM: Security event detected.</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- LOGIN EVENTS                                    -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Login gagal (1x) — dicatat tapi belum alert -->
+  <rule id="100101" level="5">
+    <if_sid>100100</if_sid>
+    <field name="event_type">LOGIN_FAILED</field>
+    <description>Medical CRM: Failed login attempt dari $(source_ip) untuk user $(username).</description>
+  </rule>
+
+  <!-- BRUTE FORCE: 5 login gagal dalam 2 menit dari IP yang sama -->
+  <!-- Level 10 = CRITICAL → PASTI kirim notifikasi Telegram!     -->
+  <!-- "frequency=5" = harus terjadi 5 kali                       -->
+  <!-- "timeframe=120" = dalam jangka waktu 120 detik (2 menit)   -->
+  <!-- "same_source_ip" = harus dari IP yang sama                 -->
+  <rule id="100102" level="10" frequency="5" timeframe="120">
+    <if_matched_sid>100101</if_matched_sid>
+    <same_source_ip />
+    <description>Medical CRM: 🚨 BRUTE FORCE DETECTED — 5+ failed logins dari $(source_ip) dalam 2 menit!</description>
+  </rule>
+
+  <!-- Login berhasil — dicatat untuk audit trail -->
+  <rule id="100103" level="3">
+    <if_sid>100100</if_sid>
+    <field name="event_type">LOGIN_SUCCESS</field>
+    <description>Medical CRM: Successful login dari $(source_ip).</description>
+  </rule>
+
+  <!-- Akun dikunci karena terlalu banyak percobaan gagal -->
+  <rule id="100104" level="8">
+    <if_sid>100100</if_sid>
+    <field name="event_type">ACCOUNT_LOCKED</field>
+    <description>Medical CRM: ⚠️ Account LOCKED — terlalu banyak percobaan gagal dari $(source_ip).</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- WAF EVENTS (Web Application Firewall)          -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- WAF memblokir 1 payload berbahaya -->
+  <rule id="100110" level="8">
+    <if_sid>100100</if_sid>
+    <field name="event_type">WAF_BLOCK</field>
+    <description>Medical CRM: ⚠️ WAF blocked malicious payload dari $(source_ip) ke $(path).</description>
+  </rule>
+
+  <!-- SERANGAN MASIF: 10+ WAF blocks dari IP yang sama dalam 1 menit -->
+  <!-- Ini berarti lawan sedang gencar menembakkan payload ke server kita -->
+  <rule id="100111" level="12" frequency="10" timeframe="60">
+    <if_matched_sid>100110</if_matched_sid>
+    <same_source_ip />
+    <description>Medical CRM: 🚨🚨 MASSIVE ATTACK — 10+ WAF blocks dari $(source_ip) dalam 60 detik!</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- RATE LIMIT EVENTS                               -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Rate limit triggered — seseorang mengirim terlalu banyak request -->
+  <rule id="100120" level="7">
+    <if_sid>100100</if_sid>
+    <field name="event_type">RATE_LIMIT_HIT</field>
+    <description>Medical CRM: ⚠️ Rate limit triggered untuk $(source_ip) di $(path).</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- CSRF EVENTS                                     -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- CSRF violation — seseorang mengirim request tanpa/dengan CSRF token salah -->
+  <!-- Ini bisa berarti serangan CSRF atau lawan mencoba bypass autentikasi     -->
+  <rule id="100130" level="8">
+    <if_sid>100100</if_sid>
+    <field name="event_type">CSRF_VIOLATION</field>
+    <description>Medical CRM: ⚠️ CSRF token violation dari $(source_ip) ke $(path).</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- AUTH EVENTS                                     -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Akses ditolak — role tidak punya izin (misalnya viewer coba POST) -->
+  <rule id="100140" level="6">
+    <if_sid>100100</if_sid>
+    <field name="event_type">AUTH_DENIED</field>
+    <description>Medical CRM: Access denied untuk $(source_ip) ke $(path) — role tidak memiliki izin.</description>
+  </rule>
+
+  <!-- Token baru diterbitkan — dicatat untuk audit -->
+  <rule id="100141" level="4">
+    <if_sid>100100</if_sid>
+    <field name="event_type">TOKEN_ISSUED</field>
+    <description>Medical CRM: New token issued dari $(source_ip).</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- FILE UPLOAD EVENTS                              -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- File upload berhasil — dicatat untuk audit trail data medis -->
+  <rule id="100150" level="4">
+    <if_sid>100100</if_sid>
+    <field name="event_type">FILE_UPLOAD_SUCCESS</field>
+    <description>Medical CRM: File uploaded oleh $(source_ip) untuk patient.</description>
+  </rule>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SURICATA IDS PASSTHROUGH                        -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- Ketika Suricata mendeteksi serangan, alert-nya juga masuk ke Wazuh. -->
+  <!-- Rule ini menangkap alert Suricata yang berisi tag [MedCRM].         -->
+  <rule id="100160" level="10">
+    <if_sid>86601</if_sid>
+    <match>MedCRM</match>
+    <description>Suricata IDS: 🚨 Medical CRM network attack detected!</description>
+  </rule>
+
+</group>

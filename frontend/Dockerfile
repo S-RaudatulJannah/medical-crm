@@ -56,7 +56,8 @@ RUN addgroup --system --gid 1001 nodejs \
 # Copy hasil build standalone (minimal size)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Buat folder public secara manual agar tidak error meskipun folder tersebut kosong/diabaikan
+RUN mkdir -p public
 
 # Ubah ownership ke non-root user
 RUN chown -R nextjs:nodejs /app

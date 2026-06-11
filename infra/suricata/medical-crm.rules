@@ -1,0 +1,139 @@
+# ══════════════════════════════════════════════════════════════
+# Medical CRM — Custom Suricata Rules
+# ══════════════════════════════════════════════════════════════
+#
+# APA INI?
+# File ini berisi "daftar ciri-ciri serangan" yang dikenali Suricata.
+# Suricata akan membaca setiap paket jaringan yang masuk ke server,
+# lalu mencocokkannya dengan pattern di bawah ini.
+# Jika cocok → Suricata menulis alert ke log → Wazuh membacanya.
+#
+# CARA PASANG DI UBUNTU SERVER:
+#   1. Copy file ini ke server:
+#      sudo cp medical-crm.rules /etc/suricata/rules/
+#
+#   2. Tambahkan ke konfigurasi Suricata:
+#      sudo nano /etc/suricata/suricata.yaml
+#      Cari bagian "rule-files:" lalu tambahkan:
+#        - medical-crm.rules
+#
+#   3. Restart Suricata:
+#      sudo systemctl restart suricata
+#
+#   4. Cek apakah rules sudah aktif:
+#      sudo suricata --list-runmodes
+#      sudo tail -f /var/log/suricata/fast.log
+# ══════════════════════════════════════════════════════════════
+
+# ── SQL Injection Detection ──────────────────────────────────
+# Mendeteksi pola SQL Injection di traffic HTTP yang masuk.
+# "flow:established,to_server" artinya hanya cek traffic dari luar ke server kita.
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] SQL Injection - UNION SELECT detected"; \
+    flow:established,to_server; \
+    content:"union"; nocase; \
+    content:"select"; nocase; distance:0; within:30; \
+    sid:9000001; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] SQL Injection - OR 1=1 bypass attempt"; \
+    flow:established,to_server; \
+    pcre:"/(\bor\b|\band\b)\s+(1\s*=\s*1|'1'\s*=\s*'1'|true)/i"; \
+    sid:9000002; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] SQL Injection - DROP/DELETE/INSERT attempt"; \
+    flow:established,to_server; \
+    pcre:"/(drop|delete|insert|update|alter)\s+(table|from|into|database)/i"; \
+    sid:9000003; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] SQL Injection - Comment injection (--)"; \
+    flow:established,to_server; \
+    content:"--"; http_uri; \
+    sid:9000004; rev:1; priority:2; \
+    classtype:web-application-attack; \
+)
+
+# ── XSS Detection ────────────────────────────────────────────
+# Mendeteksi payload Cross-Site Scripting di traffic HTTP.
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] XSS - Script tag detected in payload"; \
+    flow:established,to_server; \
+    content:"<script"; nocase; \
+    sid:9000010; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] XSS - Event handler injection (onerror/onload)"; \
+    flow:established,to_server; \
+    pcre:"/(onerror|onload|onmouseover|onfocus|onclick)\s*=/i"; \
+    sid:9000011; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] XSS - javascript: URI scheme detected"; \
+    flow:established,to_server; \
+    content:"javascript:"; nocase; \
+    sid:9000012; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+# ── Brute Force Detection ────────────────────────────────────
+# Mendeteksi percobaan login berulang ke endpoint /api/auth/login.
+# "threshold: count 10, seconds 60" artinya: alert hanya muncul
+# jika ada 10 POST ke /api/auth/login dari IP yang sama dalam 60 detik.
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] Brute Force - Rapid POST to /api/auth/login"; \
+    flow:established,to_server; \
+    content:"POST"; http_method; \
+    content:"/api/auth/login"; http_uri; \
+    threshold:type threshold, track by_src, count 10, seconds 60; \
+    sid:9000020; rev:1; priority:1; \
+    classtype:attempted-admin; \
+)
+
+# ── Directory Traversal ──────────────────────────────────────
+# Mendeteksi percobaan akses file di luar web root (../../etc/passwd).
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] Directory Traversal attempt detected"; \
+    flow:established,to_server; \
+    content:".."; http_uri; \
+    sid:9000030; rev:1; priority:1; \
+    classtype:web-application-attack; \
+)
+
+# ── Port Scanning Detection ──────────────────────────────────
+# Mendeteksi Nmap SYN scan — banyak paket SYN tanpa menyelesaikan handshake.
+# "count 30, seconds 10" = 30 SYN packets dalam 10 detik dari IP yang sama.
+
+alert tcp any any -> $HOME_NET any ( \
+    msg:"[MedCRM] Nmap SYN Scan detected"; \
+    flags:S; \
+    threshold:type threshold, track by_src, count 30, seconds 10; \
+    sid:9000040; rev:1; priority:2; \
+    classtype:attempted-recon; \
+)
+
+# ── Nikto Scanner Detection ──────────────────────────────────
+# Mendeteksi Nikto vulnerability scanner dari User-Agent header.
+
+alert http any any -> $HOME_NET any ( \
+    msg:"[MedCRM] Nikto vulnerability scanner detected"; \
+    flow:established,to_server; \
+    content:"Nikto"; http_header; nocase; \
+    sid:9000050; rev:1; priority:2; \
+    classtype:attempted-recon; \
+)

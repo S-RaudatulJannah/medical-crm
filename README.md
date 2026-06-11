@@ -8,7 +8,11 @@
 ```
 medical-crm/
 ├── backend/          ← Python FastAPI (CPU-intensive endpoint untuk HPA)
-└── frontend/         ← Next.js 14 App Router + Tailwind CSS
+├── frontend/         ← Next.js 14 App Router + Tailwind CSS
+└── infra/            ← Konfigurasi monitoring & alerting (Suricata + Wazuh + Telegram)
+    ├── setup-monitoring.sh     ← Script otomatis setup di Ubuntu Server
+    ├── suricata/               ← Custom IDS rules (deteksi SQLi, XSS, brute force)
+    └── wazuh/                  ← SIEM decoder, rules, dan Telegram Bot script
 ```
 
 ---

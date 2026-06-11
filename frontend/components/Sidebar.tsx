@@ -7,8 +7,6 @@ import {
   Building2,
   UserPlus,
   Activity,
-  Shield,
-  Cpu,
   LogIn,
 } from 'lucide-react'
 
@@ -132,29 +130,11 @@ export default function Sidebar() {
             )
           })}
         </ul>
-
-        {/* ── HPA Info Card ── */}
-        <div className="mt-6 mx-1 bg-white/10 border border-white/20 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Cpu className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
-            <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">
-              HPA Demo
-            </span>
-          </div>
-          <p className="text-[10px] text-white/55 leading-relaxed">
-            Endpoint <code className="text-yellow-200 font-mono">POST /api/patients</code> menjalankan
-            komputasi CPU-intensive untuk memicu Kubernetes Autoscaling.
-          </p>
-        </div>
       </nav>
 
       {/* ── Footer ── */}
       <div className="px-4 py-4 border-t border-white/20">
-        <div className="flex items-center gap-2 text-white/40">
-          <Shield className="w-3.5 h-3.5 shrink-0" />
-          <span className="text-[11px]">Kubernetes Ready · v1.0.0</span>
-        </div>
-        <p className="text-white/25 text-[10px] mt-1">RSUD Harapan Sehat</p>
+        <p className="text-white/25 text-[10px]">RSUD Harapan Sehat</p>
       </div>
     </aside>
   )

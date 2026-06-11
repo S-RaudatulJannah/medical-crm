@@ -1,0 +1,44 @@
+<!--
+══════════════════════════════════════════════════════════════
+Medical CRM — Wazuh Custom Decoder
+══════════════════════════════════════════════════════════════
+
+APA INI?
+Decoder adalah "penerjemah" yang mengajarkan Wazuh cara membaca
+log dari aplikasi Medical CRM kita.
+
+Tanpa decoder ini, Wazuh hanya melihat log kita sebagai teks biasa
+dan tidak bisa mengekstrak informasi penting seperti IP penyerang,
+tipe serangan, atau endpoint yang diserang.
+
+Dengan decoder ini, Wazuh bisa memahami:
+- event_type  → Jenis event (LOGIN_FAILED, WAF_BLOCK, dll)
+- source_ip   → IP penyerang
+- method      → HTTP method (GET/POST)
+- path        → Endpoint yang diserang (/api/auth/login, dll)
+
+CONTOH LOG YANG DI-PARSE:
+{"timestamp":"2025-06-09T14:05:23","event_type":"LOGIN_FAILED","source_ip":"192.168.1.50","method":"POST","path":"/api/auth/login","user_agent":"curl/7.81","details":{"username":"admin"}}
+
+CARA PASANG:
+  sudo cp medical-crm_decoder.xml /var/ossec/etc/decoders/
+  sudo systemctl restart wazuh-manager
+══════════════════════════════════════════════════════════════
+-->
+
+<!-- Decoder utama: mencocokkan log yang mengandung "event_type" -->
+<!-- prematch = syarat awal agar Wazuh tahu "ini log dari Medical CRM" -->
+<!-- regex = pola untuk mengekstrak field-field penting dari log JSON -->
+<decoder name="medical-crm">
+  <prematch>"event_type":\s*"</prematch>
+  <regex>"event_type":\s*"(\S+)".*"source_ip":\s*"(\S+)".*"method":\s*"(\S+)".*"path":\s*"(\S+)"</regex>
+  <order>event_type,source_ip,method,path</order>
+</decoder>
+
+<!-- Decoder anak: mengekstrak detail tambahan seperti username -->
+<!-- if_parent = hanya dijalankan jika decoder utama sudah cocok -->
+<decoder name="medical-crm-details">
+  <parent>medical-crm</parent>
+  <regex>"username":\s*"(\S+)"</regex>
+  <order>username</order>
+</decoder>
