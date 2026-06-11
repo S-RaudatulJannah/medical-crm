@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    image: raudatul/medical-crm-backend:latest
+    container_name: medical-crm-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - UPLOAD_DIR=/var/medical-crm/uploads
+      - SECURITY_LOG_DIR=/var/log/medical-crm
+    volumes:
+      # Mount folder log ke host agar bisa dibaca oleh Wazuh secara real-time
+      - /var/log/medical-crm:/var/log/medical-crm
+      # Mount folder upload
+      - /var/medical-crm/uploads:/var/medical-crm/uploads
+    restart: always
+
+  frontend:
+    image: raudatul/medical-crm-frontend:latest
+    container_name: medical-crm-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: always
