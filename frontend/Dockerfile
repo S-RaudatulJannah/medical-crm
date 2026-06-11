@@ -12,30 +12,19 @@
 # Contoh: BACKEND_URL=http://backend-service:8000
 # ============================================================
 
-# ── Stage 1: Install Dependencies ──────────────────────────
-FROM node:20-alpine AS deps
-
-WORKDIR /app
-
-# Install only package files dulu untuk memanfaatkan Docker layer cache
-COPY package.json package-lock.json* ./
-
-# Install dependencies (gunakan npm ci jika ada lock file, npm install sebagai fallback)
-RUN npm install --legacy-peer-deps
-
-# ── Stage 2: Build Application ─────────────────────────────
+# ── Stage 1: Build Application ─────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy node_modules dari stage deps
-COPY --from=deps /app/node_modules ./node_modules
+# Install dependencies and build together to avoid symlink issues in older Docker versions
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
 
 # Copy semua source code
 COPY . .
 
 # Build Next.js (menghasilkan .next/standalone untuk output minimal)
-# BACKEND_URL tidak perlu diset saat build karena ini server-side env var
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
