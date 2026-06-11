@@ -19,10 +19,12 @@ WORKDIR /app
 
 # Install dependencies and build together to avoid symlink issues in older Docker versions
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
 
 # Copy semua source code
 COPY . .
+
+# Jalankan npm install SETELAH COPY agar node_modules dari host (jika ada) tertimpa
+RUN npm install --legacy-peer-deps
 
 # Build Next.js (menghasilkan .next/standalone untuk output minimal)
 ENV NEXT_TELEMETRY_DISABLED=1
