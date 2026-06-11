@@ -48,7 +48,7 @@ spec:
       containers:
       - name: backend
         image: raudatul/medical-crm-backend:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         # ⚠️ WAJIB ada resource requests agar HPA bisa menghitung % CPU
@@ -117,7 +117,7 @@ spec:
       containers:
       - name: frontend
         image: raudatul/medical-crm-frontend:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
         env:

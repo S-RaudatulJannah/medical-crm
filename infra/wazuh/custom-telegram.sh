@@ -40,8 +40,8 @@
 # ┌─────────────────────────────────────────────┐
 # │  ⚠️  GANTI DUA VARIABEL DI BAWAH INI!  ⚠️  │
 # └─────────────────────────────────────────────┘
-TELEGRAM_BOT_TOKEN="8622704456:AAEX_Xz3aHPf43y3CI1ES1YKNV040m_wbGA"
-TELEGRAM_CHAT_ID="7222753190"
+TELEGRAM_BOT_TOKEN="GANTI_DENGAN_TOKEN_DARI_BOTFATHER"
+TELEGRAM_CHAT_ID="GANTI_DENGAN_CHAT_ID_GRUP"
 
 # ── Parameter dari Wazuh ──────────────────────
 # Wazuh memanggil script ini dengan 3 argumen:
