@@ -4,13 +4,14 @@ Router: Rumah Sakit (Hospital Module)
 Endpoints:
 - GET /api/hospitals/stats → Statistik real-time rumah sakit
   (Total pasien hari ini, kapasitas, distribusi triase, daftar pasien)
+
+Storage: Supabase (PostgreSQL) — query langsung ke tabel patients.
 """
 
-from fastapi import APIRouter, Depends
-from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
 
-# Import shared data store dari modul patients
-from app.routes.patients import _patients_store
+from app.database import get_supabase
 from app.security import require_roles
 
 router = APIRouter()
@@ -46,35 +47,48 @@ def get_hospital_stats():
     - **triage_distribution**: Distribusi status triase (Kritis/Sedang/Ringan)
     - **patients**: Daftar lengkap semua pasien beserta status triase
     """
-    today_str = datetime.now().date().isoformat()  # Format: "YYYY-MM-DD"
+    try:
+        sb = get_supabase()
+
+        # Ambil semua pasien dari Supabase
+        result = sb.table("patients").select("*").order("registered_at", desc=True).execute()
+        all_patients = result.data or []
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Gagal mengambil data dari database: {str(e)}",
+        )
+
+    today_str = datetime.now(timezone.utc).date().isoformat()  # Format: "YYYY-MM-DD"
 
     # Filter pasien yang terdaftar hari ini
     today_patients = [
-        p for p in _patients_store
+        p for p in all_patients
         if isinstance(p.get("registered_at"), str)
         and p["registered_at"][:10] == today_str
     ]
 
     # Hitung ketersediaan tempat tidur
-    beds_occupied = min(len(_patients_store), _HOSPITAL_CONFIG["bed_capacity"])
+    beds_occupied = min(len(all_patients), _HOSPITAL_CONFIG["bed_capacity"])
     beds_available = _HOSPITAL_CONFIG["bed_capacity"] - beds_occupied
     occupancy_rate = round((beds_occupied / _HOSPITAL_CONFIG["bed_capacity"]) * 100, 1)
 
     # Hitung distribusi status triase
     triage_distribution = {
-        "critical": sum(1 for p in _patients_store if p.get("triage_status") == "Kritis"),
-        "moderate": sum(1 for p in _patients_store if p.get("triage_status") == "Sedang"),
-        "mild":     sum(1 for p in _patients_store if p.get("triage_status") == "Ringan"),
+        "critical": sum(1 for p in all_patients if p.get("triage_status") == "Kritis"),
+        "moderate": sum(1 for p in all_patients if p.get("triage_status") == "Sedang"),
+        "mild":     sum(1 for p in all_patients if p.get("triage_status") == "Ringan"),
     }
 
     return {
         **_HOSPITAL_CONFIG,
         "total_patients_today": len(today_patients),
-        "total_patients": len(_patients_store),
+        "total_patients": len(all_patients),
         "beds_occupied": beds_occupied,
         "beds_available": beds_available,
         "occupancy_rate_percent": occupancy_rate,
         "triage_distribution": triage_distribution,
-        "patients": _patients_store,
-        "last_updated": datetime.now().isoformat(),
+        "patients": all_patients,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
     }

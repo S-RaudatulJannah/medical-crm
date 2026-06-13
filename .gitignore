@@ -23,3 +23,5 @@ Thumbs.db
 # Logs & debug
 *.log
 backend_output.txt
+backend/logs/
+backend/uploads/

@@ -26,7 +26,7 @@ from typing import Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from app.routes.patients import _patients_store
+from app.database import get_supabase
 from app.security import log_security_event, require_roles, verify_csrf_token
 
 router = APIRouter()
@@ -170,8 +170,17 @@ async def upload_patient_document(
     8. Filename: Diacak dengan secrets.token_hex untuk mencegah path traversal
     """
     # Validasi: Apakah pasien ada?
-    patient = next((p for p in _patients_store if p["id"] == patient_id), None)
-    if not patient:
+    try:
+        sb = get_supabase()
+        result = sb.table("patients").select("id").eq("id", patient_id).execute()
+        patients = result.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Gagal mengecek data pasien: {str(e)}",
+        )
+
+    if not patients:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pasien dengan ID {patient_id} tidak ditemukan.",

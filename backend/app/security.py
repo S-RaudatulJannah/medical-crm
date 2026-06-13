@@ -247,12 +247,34 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def verify_admin_credentials(username: str, password: str) -> bool:
     """
-    Verifikasi kredensial admin.
+    Verifikasi kredensial user.
+
+    Urutan pengecekan:
+    1. Cek tabel 'users' di Supabase (mendukung admin/staff/viewer)
+    2. Fallback ke env var ADMIN_USERNAME + ADMIN_PASSWORD_BCRYPT
+       (untuk backward compatibility jika Supabase belum dikonfigurasi)
 
     Perubahan dari versi lama:
     - LAMA: hashlib.sha256() + hmac.compare_digest() — rentan rainbow table
     - BARU: bcrypt.checkpw() — tahan brute-force karena cost factor
     """
+    # ── Coba autentikasi via Supabase ─────────────────────
+    try:
+        from app.database import get_supabase
+        sb = get_supabase()
+        result = sb.table("users").select("username, password_bcrypt, role, is_active") \
+            .eq("username", username) \
+            .eq("is_active", True) \
+            .execute()
+        users = result.data or []
+        if users:
+            user = users[0]
+            return verify_password(password, user["password_bcrypt"])
+    except Exception:
+        # Supabase belum dikonfigurasi atau error — fallback ke env var
+        pass
+
+    # ── Fallback: env var (backward compatibility) ─────────
     if username != ADMIN_USERNAME:
         return False
     return verify_password(password, ADMIN_PASSWORD_BCRYPT)

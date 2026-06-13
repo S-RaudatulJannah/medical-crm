@@ -108,19 +108,34 @@ def login(auth: AuthRequest, request: Request):
     # Login berhasil — bersihkan catatan gagal dan buat token
     clear_failed_logins(auth.username)
 
-    token = create_access_token(auth.username, role="admin")
+    # Ambil role user dari Supabase, fallback ke "admin" jika pakai env var
+    user_role = "admin"
+    try:
+        from app.database import get_supabase
+        sb = get_supabase()
+        result = sb.table("users").select("role") \
+            .eq("username", auth.username) \
+            .eq("is_active", True) \
+            .execute()
+        users = result.data or []
+        if users:
+            user_role = users[0]["role"]
+    except Exception:
+        pass  # Fallback ke role admin jika Supabase tidak tersedia
+
+    token = create_access_token(auth.username, role=user_role)
     token_info = get_token_info(token)
 
     # [FIX-09] Log login sukses
     log_security_event("LOGIN_SUCCESS", request, {
         "username": auth.username,
-        "role": "admin",
+        "role": user_role,
     })
 
     return {
         "access_token": token,
         "token_type": "bearer",
-        "role": "admin",
+        "role": user_role,
         "csrf_token": token_info["csrf_token"] if token_info else "",
     }
 

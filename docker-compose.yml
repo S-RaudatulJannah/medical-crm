@@ -13,6 +13,9 @@ services:
       - APP_ENV=production
       - UPLOAD_DIR=/var/medical-crm/uploads
       - SECURITY_LOG_DIR=/var/log/medical-crm
+      # Supabase — isi dengan nilai asli sebelum deploy
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
     volumes:
       # Mount folder log ke host agar bisa dibaca oleh Wazuh secara real-time
       - /var/log/medical-crm:/var/log/medical-crm

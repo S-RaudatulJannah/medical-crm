@@ -5,77 +5,19 @@ Endpoints:
 - POST /api/patients  → Registrasi pasien darurat + Triase Otomatis + CPU-Intensive (HPA Trigger)
 - GET  /api/patients  → Daftar semua pasien
 - GET  /api/patients/{id} → Detail pasien berdasarkan ID
+
+Storage: Supabase (PostgreSQL) — data persisten antar restart pod/container.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models import PatientInput
+from app.database import get_supabase
 from app.security import require_roles, verify_csrf_token, rate_limiter, waf_protect
 from app.services.triage import cpu_intensive_triage_computation, determine_triage_status
 
 router = APIRouter()
-
-# ══════════════════════════════════════════════════════════════════
-# IN-MEMORY DATA STORE
-# Untuk keperluan demo Kubernetes - tidak perlu setup database
-# Di produksi: Gunakan PostgreSQL / MySQL dengan SQLAlchemy ORM
-# ══════════════════════════════════════════════════════════════════
-_patients_store: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "name": "Budi Santoso",
-        "age": 45,
-        "chief_complaint": "Nyeri dada hebat dan sesak napas sejak 1 jam lalu",
-        "pain_level": 9,
-        "triage_status": "Kritis",
-        "registered_at": datetime.now().isoformat(),
-        "hospital_id": 1,
-    },
-    {
-        "id": 2,
-        "name": "Siti Rahayu",
-        "age": 32,
-        "chief_complaint": "Demam tinggi 39°C disertai mual dan muntah",
-        "pain_level": 6,
-        "triage_status": "Sedang",
-        "registered_at": datetime.now().isoformat(),
-        "hospital_id": 1,
-    },
-    {
-        "id": 3,
-        "name": "Ahmad Fauzi",
-        "age": 28,
-        "chief_complaint": "Luka gores ringan di lengan kanan saat bekerja",
-        "pain_level": 3,
-        "triage_status": "Ringan",
-        "registered_at": datetime.now().isoformat(),
-        "hospital_id": 1,
-    },
-    {
-        "id": 4,
-        "name": "Dewi Kartika",
-        "age": 55,
-        "chief_complaint": "Pusing berat dan migrain yang tidak tertahankan",
-        "pain_level": 7,
-        "triage_status": "Sedang",
-        "registered_at": datetime.now().isoformat(),
-        "hospital_id": 1,
-    },
-    {
-        "id": 5,
-        "name": "Rudi Hermawan",
-        "age": 19,
-        "chief_complaint": "Batuk ringan dan pilek sejak 2 hari",
-        "pain_level": 2,
-        "triage_status": "Ringan",
-        "registered_at": datetime.now().isoformat(),
-        "hospital_id": 1,
-    },
-]
-
-_patient_counter = 6  # Auto-increment ID counter
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -114,8 +56,6 @@ def register_patient(patient: PatientInput):
     - 🟡 **Sedang**: Penanganan dalam waktu dekat (nyeri 5-7)
     - 🟢 **Ringan**: Dapat menunggu antrian (nyeri 1-4)
     """
-    global _patient_counter
-
     # ──────────────────────────────────────────────────────────────
     # BLOK KOMPUTASI BERAT - PEMICU KUBERNETES HPA
     # Fungsi ini berjalan secara sinkron dan memblokir thread penuh
@@ -130,24 +70,30 @@ def register_patient(patient: PatientInput):
         pain_level=patient.pain_level,
     )
 
-    # Buat record pasien baru
-    new_patient: Dict[str, Any] = {
-        "id": _patient_counter,
+    # Buat record pasien baru dan simpan ke Supabase
+    new_patient = {
         "name": patient.name,
         "age": patient.age,
         "chief_complaint": patient.chief_complaint,
         "pain_level": patient.pain_level,
         "triage_status": triage_status,
-        "registered_at": datetime.now().isoformat(),
+        "registered_at": datetime.now(timezone.utc).isoformat(),
         "hospital_id": 1,
     }
 
-    _patients_store.append(new_patient)
-    _patient_counter += 1
+    try:
+        sb = get_supabase()
+        result = sb.table("patients").insert(new_patient).execute()
+        saved_patient = result.data[0] if result.data else new_patient
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Gagal menyimpan data pasien ke database: {str(e)}",
+        )
 
     return {
         "message": "Pasien berhasil didaftarkan dan triase telah selesai",
-        "patient": new_patient,
+        "patient": saved_patient,
         "triage_status": triage_status,
         "computation_info": (
             f"Verifikasi komputasi triase selesai. "
@@ -166,9 +112,19 @@ def register_patient(patient: PatientInput):
 )
 def get_all_patients():
     """Mendapatkan seluruh daftar pasien yang sudah terdaftar di sistem."""
+    try:
+        sb = get_supabase()
+        result = sb.table("patients").select("*").order("registered_at", desc=True).execute()
+        patients = result.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Gagal mengambil data pasien dari database: {str(e)}",
+        )
+
     return {
-        "patients": _patients_store,
-        "total": len(_patients_store),
+        "patients": patients,
+        "total": len(patients),
     }
 
 
@@ -182,10 +138,20 @@ def get_all_patients():
 )
 def get_patient_by_id(patient_id: int):
     """Mendapatkan informasi lengkap seorang pasien berdasarkan ID-nya."""
-    patient = next((p for p in _patients_store if p["id"] == patient_id), None)
-    if not patient:
+    try:
+        sb = get_supabase()
+        result = sb.table("patients").select("*").eq("id", patient_id).execute()
+        patients = result.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Gagal mengambil data pasien dari database: {str(e)}",
+        )
+
+    if not patients:
         raise HTTPException(
             status_code=404,
             detail=f"Pasien dengan ID {patient_id} tidak ditemukan di sistem.",
         )
-    return patient
+
+    return patients[0]
